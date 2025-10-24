@@ -14,19 +14,19 @@ Minimal mediasoup server built with Express and Socket.IO. The server exposes a 
 	```
 3. For rapid UI iteration, run the Vite dev server in a separate terminal:
 	```powershell
-  npm run client:dev
+	npm run client:dev
 	```
 	The dev server proxies `/socket.io` traffic to the Node process on port `3000`. Override the target with `VITE_SIGNALING_URL` if the signaling server lives elsewhere.
 
 4. To serve the static client from Express, first build it:
 	```powershell
-  npm run client:build
+	npm run client:build
 	```
 	Then browse to `http://localhost:3000` to load the compiled assets from `dist/`.
 
 By default the server listens on `0.0.0.0:3000`. Override runtime settings with environment variables (see `config.js`).
 
-Create a `.env` file (see `.env` template) to define these environment variables locally.
+Create a `.env` file (see `.env` template) to define these environment variables locally. ** Rename `.env.sample` to `.env` to get started as all values are filled in. **
 
 ## Socket.IO events
 
