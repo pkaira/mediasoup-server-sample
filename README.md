@@ -57,3 +57,120 @@ Adjust mediasoup worker and transport settings in `config.js`. Useful environmen
 - `MEDIASOUP_LISTEN_IP` (defaults to the first non-internal IPv4) to choose the interface mediasoup binds to.
 - `ANNOUNCED_IP` when running behind NAT.
 - `MEDIASOUP_MIN_PORT` / `MEDIASOUP_MAX_PORT` to override RTP port range.
+
+### SSL/HTTPS Configuration
+
+The server supports SSL/HTTPS for secure connections. To enable SSL:
+
+1. **For Development (Self-signed certificates):**
+   ```bash
+   ./generate-certs.sh
+   ```
+   This creates self-signed certificates in the `certs/` directory.
+
+2. **For Production:**
+   - Obtain SSL certificates from a trusted Certificate Authority (CA)
+   - Place your certificate files in the `certs/` directory or specify custom paths
+
+3. **Enable SSL in your environment:**
+   ```bash
+   SSL_ENABLED=true
+   SSL_PORT=3443
+   SSL_CERT=certs/cert.pem
+   SSL_KEY=certs/key.pem
+   ```
+
+4. **Additional SSL Environment Variables:**
+   - `SSL_ENABLED` - Set to `true` to enable HTTPS (default: `false`)
+   - `SSL_PORT` - HTTPS port (default: `3443`)
+   - `SSL_CERT` - Path to SSL certificate file (default: `certs/cert.pem`)
+   - `SSL_KEY` - Path to SSL private key file (default: `certs/key.pem`)
+
+When SSL is enabled, the server will run both HTTP and HTTPS servers:
+- HTTP: `http://localhost:3000` (or your configured port)
+- HTTPS: `https://localhost:3443` (or your configured SSL port)
+
+**Note:** For WebRTC to work properly in production, HTTPS is required by modern browsers for accessing user media (camera/microphone).
+
+## Background Process Management
+
+For production deployments, you may want to run the server in the background so it continues running even after SSH disconnection.
+
+### 🚀 Starting the Server in Background
+
+**Start with SSL on port 443 (requires sudo):**
+```bash
+sudo nohup npm start > mediasoup.log 2>&1 &
+```
+
+**Alternative - Direct Node.js command:**
+```bash
+sudo nohup node server.js > mediasoup.log 2>&1 &
+```
+
+**For non-privileged ports (3000, 3443):**
+```bash
+nohup npm start > mediasoup.log 2>&1 &
+```
+
+### 📊 Process Management Commands
+
+**Check if process is running:**
+```bash
+ps aux | grep "node server.js" | grep -v grep
+```
+
+**Get process ID:**
+```bash
+pgrep -f "node server.js"
+```
+
+**Check specific process by PID:**
+```bash
+ps -p <PID>
+```
+
+### 📝 Log Management
+
+**View live logs:**
+```bash
+tail -f mediasoup.log
+```
+
+**View recent logs:**
+```bash
+tail -n 20 mediasoup.log
+```
+
+**View all logs:**
+```bash
+cat mediasoup.log
+```
+
+### ⛔ Stopping the Server
+
+**Kill by process ID:**
+```bash
+sudo kill <PID>
+```
+
+**Force kill by process ID:**
+```bash
+sudo kill -9 <PID>
+```
+
+**Kill by process name:**
+```bash
+sudo pkill -f "node server.js"
+```
+
+**Force kill by process name:**
+```bash
+sudo pkill -9 -f "node server.js"
+```
+
+### 🔍 Server Access
+
+When running with SSL enabled, your server will be accessible at:
+- **HTTP**: `http://your-server-ip:3000`
+- **HTTPS**: `https://your-server-ip:443`

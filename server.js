@@ -3,11 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const { Server } = require('socket.io');
 const mediasoup = require('mediasoup');
 const config = require('./config');
 
-const { listenIp, listenPort, mediasoup: mediasoupConfig } = config;
+const { listenIp, listenPort, ssl, mediasoup: mediasoupConfig } = config;
 
 function cloneMeta(meta) {
   if (!meta || typeof meta !== 'object') {
@@ -51,7 +52,28 @@ app.get('/', (req, res) => {
 });
 
 const httpServer = http.createServer(app);
-const io = new Server(httpServer, {
+
+// Create HTTPS server if SSL is enabled
+let httpsServer;
+if (ssl.enabled) {
+  try {
+    const sslOptions = {
+      key: fs.readFileSync(ssl.key),
+      cert: fs.readFileSync(ssl.cert)
+    };
+    httpsServer = https.createServer(sslOptions, app);
+    console.log('SSL enabled with certificate:', ssl.cert);
+  } catch (error) {
+    console.error('Failed to load SSL certificates:', error.message);
+    console.error('SSL will be disabled. Please check your certificate files.');
+    httpsServer = null;
+  }
+}
+
+// Use HTTPS server if available, otherwise fall back to HTTP
+const serverForSocketIO = httpsServer || httpServer;
+
+const io = new Server(serverForSocketIO, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST']
@@ -558,5 +580,12 @@ io.on('connection', (socket) => {
 });
 
 httpServer.listen(listenPort, listenIp, () => {
-  console.log(`mediasoup server listening on ${listenIp}:${listenPort}`);
+  console.log(`mediasoup HTTP server listening on ${listenIp}:${listenPort}`);
 });
+
+// Start HTTPS server if SSL is enabled
+if (httpsServer) {
+  httpsServer.listen(ssl.listenPort, listenIp, () => {
+    console.log(`mediasoup HTTPS server listening on ${listenIp}:${ssl.listenPort}`);
+  });
+}

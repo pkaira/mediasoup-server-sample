@@ -1,4 +1,5 @@
 const os = require('os');
+const path = require('path');
 
 const listenIp = process.env.LISTEN_IP || '0.0.0.0';
 
@@ -22,6 +23,12 @@ const mediasoupListenIp = process.env.MEDIASOUP_LISTEN_IP || getDefaultIpAddress
 module.exports = {
   listenIp,
   listenPort: Number(process.env.PORT) || 3000,
+  ssl: {
+    enabled: process.env.SSL_ENABLED === 'true',
+    listenPort: Number(process.env.SSL_PORT) || 3443,
+    cert: process.env.SSL_CERT || path.join(__dirname, 'certs', 'cert.pem'),
+    key: process.env.SSL_KEY || path.join(__dirname, 'certs', 'key.pem')
+  },
   mediasoup: {
     numWorkers: Math.max(os.cpus().length, 1),
     worker: {
