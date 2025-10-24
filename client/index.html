@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>mediasoup sample client</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #121212;
+      color: #e6e6e6;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 1rem 2rem;
+      border-bottom: 1px solid #272727;
+    }
+
+    main {
+      flex: 1;
+      padding: 1rem 2rem;
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    fieldset {
+      border: 1px solid #272727;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      background: #1b1b1b;
+    }
+
+    legend {
+      padding: 0 0.5rem;
+      font-weight: 600;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.9rem;
+      margin-bottom: 0.75rem;
+    }
+
+    input {
+      border: 1px solid #373737;
+      border-radius: 0.375rem;
+      padding: 0.5rem 0.75rem;
+      background: #0f0f0f;
+      color: inherit;
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 0.375rem;
+      padding: 0.5rem 0.9rem;
+      background: #2563eb;
+      color: white;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button[disabled] {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .video-grid {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    video {
+      width: 100%;
+      background: #000;
+      border-radius: 0.5rem;
+    }
+
+    #logs {
+      font-family: "Fira Code", monospace;
+      font-size: 0.8rem;
+      max-height: 160px;
+      overflow-y: auto;
+      background: #0f0f0f;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>mediasoup sample client</h1>
+    <p>Connect to the local mediasoup server, publish your camera, and see remote peers.</p>
+  </header>
+  <main>
+    <fieldset>
+      <legend>Connection</legend>
+      <label>
+        Room ID
+        <input id="roomId" type="text" value="test-room" autocomplete="off" />
+      </label>
+      <label>
+        Peer ID (optional)
+        <input id="peerId" type="text" placeholder="auto generated" autocomplete="off" />
+      </label>
+      <div class="actions">
+        <button id="joinBtn">Join room</button>
+        <button id="leaveBtn" disabled>Leave</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Media</legend>
+      <div class="actions">
+        <button id="startMediaBtn" disabled>Start camera + mic</button>
+        <button id="stopMediaBtn" disabled>Stop camera</button>
+      </div>
+      <div class="video-grid">
+        <div>
+          <h3>Local preview</h3>
+          <video id="localVideo" playsinline muted autoplay></video>
+        </div>
+        <div>
+          <h3>Remote participants</h3>
+          <div id="remoteVideos"></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Logs</legend>
+      <div id="logs"></div>
+    </fieldset>
+  </main>
+
+  <script type="module" src="/main.js"></script>
+</body>
+
+</html>
