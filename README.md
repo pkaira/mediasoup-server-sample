@@ -174,3 +174,28 @@ sudo pkill -9 -f "node server.js"
 When running with SSL enabled, your server will be accessible at:
 - **HTTP**: `http://your-server-ip:3000`
 - **HTTPS**: `https://your-server-ip:443`
+
+## Server control script
+
+A convenience script `serverctl.sh` is included to start/stop the server reliably (and use sudo automatically when binding to privileged ports like 443).
+
+Usage:
+
+```bash
+# Start in background (uses sudo if SSL_PORT/PORT < 1024)
+./serverctl.sh start
+
+# Stop any running instance
+./serverctl.sh stop
+
+# Restart the server
+./serverctl.sh restart
+
+# Show status and listening ports
+./serverctl.sh status
+```
+
+Notes:
+- Logs go to `mediasoup.log` in the project root.
+- The script reads `.env` to decide if sudo is required for privileged ports.
+- It looks for processes matching `node server.js` and stops them gracefully (then force kills if needed).

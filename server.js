@@ -489,7 +489,28 @@ io.on('connection', (socket) => {
 
   socket.on('closeProducer', ({ producerId }, callback) => {
     try {
-      const { peer } = resolvePeerFromSocket(socket);
+      // Check if peer has joined a room before attempting to close producer
+      const { roomId, peerId } = socket.data || {};
+      if (!roomId || !peerId) {
+        // Peer hasn't joined a room yet, silently acknowledge
+        ackSuccess(callback);
+        return;
+      }
+
+      const room = rooms.get(roomId);
+      if (!room) {
+        // Room doesn't exist anymore, silently acknowledge
+        ackSuccess(callback);
+        return;
+      }
+
+      const peer = room.getPeer(peerId);
+      if (!peer) {
+        // Peer not found in room, silently acknowledge
+        ackSuccess(callback);
+        return;
+      }
+
       const producer = peer.producers.get(producerId);
       if (producer) {
         producer.close();
@@ -546,7 +567,25 @@ io.on('connection', (socket) => {
 
   socket.on('resumeConsumer', async ({ consumerId }, callback) => {
     try {
-      const { peer } = resolvePeerFromSocket(socket);
+      // Check if peer has joined a room before attempting to resume consumer
+      const { roomId, peerId } = socket.data || {};
+      if (!roomId || !peerId) {
+        ackError(callback, new Error('Peer has not joined a room yet'));
+        return;
+      }
+
+      const room = rooms.get(roomId);
+      if (!room) {
+        ackError(callback, new Error('Room is not available'));
+        return;
+      }
+
+      const peer = room.getPeer(peerId);
+      if (!peer) {
+        ackError(callback, new Error('Peer not found in room'));
+        return;
+      }
+
       const consumer = peer.getConsumer(consumerId);
       await consumer.resume();
       ackSuccess(callback);
@@ -558,7 +597,25 @@ io.on('connection', (socket) => {
 
   socket.on('pauseConsumer', async ({ consumerId }, callback) => {
     try {
-      const { peer } = resolvePeerFromSocket(socket);
+      // Check if peer has joined a room before attempting to pause consumer
+      const { roomId, peerId } = socket.data || {};
+      if (!roomId || !peerId) {
+        ackError(callback, new Error('Peer has not joined a room yet'));
+        return;
+      }
+
+      const room = rooms.get(roomId);
+      if (!room) {
+        ackError(callback, new Error('Room is not available'));
+        return;
+      }
+
+      const peer = room.getPeer(peerId);
+      if (!peer) {
+        ackError(callback, new Error('Peer not found in room'));
+        return;
+      }
+
       const consumer = peer.getConsumer(consumerId);
       await consumer.pause();
       ackSuccess(callback);
