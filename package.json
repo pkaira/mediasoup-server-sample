@@ -1,25 +1,29 @@
 {
   "name": "mediasoup-server-sample",
   "version": "1.0.0",
-  "description": "Sample MediaSoup conference server",
+  "description": "Minimal mediasoup server with Express and Socket.IO signaling.",
   "main": "server.js",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "client:dev": "vite --config vite.config.js",
+    "client:build": "vite build --config vite.config.js",
+    "client:preview": "vite preview --config vite.config.js",
+    "generate-certs": "./generate-certs.sh",
+    "start-ssl": "SSL_ENABLED=true npm start"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/pkaira/mediasoup-server-sample.git"
-  },
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/pkaira/mediasoup-server-sample/issues"
-  },
-  "homepage": "https://github.com/pkaira/mediasoup-server-sample#readme",
   "dependencies": {
-    "express": "^4.17.1",
-    "mediasoup": "^3.8.3",
-    "socket.io": "^4.2.0"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mediasoup": "^3.13.10",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "mediasoup-client": "^3.6.94",
+    "socket.io-client": "^4.7.5",
+    "vite": "^5.4.6"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
