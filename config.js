@@ -89,7 +89,13 @@ module.exports = {
       maxIncomingBitrate: 1_500_000,
       enableUdp: true,
       enableTcp: true,
-      preferUdp: true
+      preferUdp: true,
+      enableSctp: true,
+      numSctpStreams: {
+        OS: Number(process.env.MEDIASOUP_SCTP_OS) || 1024,
+        MIS: Number(process.env.MEDIASOUP_SCTP_MIS) || 1024
+      },
+      maxSctpMessageSize: Number(process.env.MEDIASOUP_MAX_SCTP_MESSAGE_SIZE) || 262_144
     }
   }
 };

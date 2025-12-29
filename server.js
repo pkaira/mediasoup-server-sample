@@ -7,20 +7,9 @@ const https = require('https');
 const { Server } = require('socket.io');
 const mediasoup = require('mediasoup');
 const config = require('./config');
+const { Room, cloneMeta } = require('./room');
 
 const { listenIp, listenPort, ssl, mediasoup: mediasoupConfig } = config;
-
-function cloneMeta(meta) {
-  if (!meta || typeof meta !== 'object') {
-    return {};
-  }
-
-  try {
-    return JSON.parse(JSON.stringify(meta));
-  } catch (error) {
-    return { ...meta };
-  }
-}
 
 const app = express();
 app.disable('x-powered-by');
@@ -111,7 +100,7 @@ async function getOrCreateRoom(roomId) {
   }
 
   if (!pendingRooms.has(roomId)) {
-    pendingRooms.set(roomId, Room.create({ roomId }));
+    pendingRooms.set(roomId, createRoomInstance(roomId));
   }
 
   const room = await pendingRooms.get(roomId);
@@ -120,250 +109,19 @@ async function getOrCreateRoom(roomId) {
   return room;
 }
 
-class Room {
-  static async create({ roomId }) {
-    const worker = await getWorker();
-    const router = await worker.createRouter(mediasoupConfig.router);
-    return new Room({ id: roomId, router });
-  }
-
-  constructor({ id, router }) {
-    this.id = id;
-    this.router = router;
-    this.peers = new Map();
-    this.producers = new Map();
-  }
-
-  addPeer({ peerId, socket, memberAgentMetaData }) {
-    if (this.peers.has(peerId)) {
-      throw new Error(`Peer with id "${peerId}" already joined`);
+async function createRoomInstance(roomId) {
+  const worker = await getWorker();
+  const router = await worker.createRouter(mediasoupConfig.router);
+  return new Room({
+    id: roomId,
+    router,
+    mediasoupConfig,
+    onEmpty: () => {
+      rooms.delete(roomId);
     }
-
-    const peer = new Peer({ id: peerId, socket, memberAgentMetaData: cloneMeta(memberAgentMetaData) });
-    this.peers.set(peerId, peer);
-    this.broadcast(
-      'peerJoined',
-      {
-        peerId,
-        memberAgentMetaData: cloneMeta(peer.memberAgentMetaData)
-      },
-      { exceptPeerId: peerId }
-    );
-    return peer;
-  }
-
-  getPeer(peerId) {
-    return this.peers.get(peerId);
-  }
-
-  removePeer(peerId) {
-    const peer = this.peers.get(peerId);
-    if (!peer) {
-      return;
-    }
-
-    this.peers.delete(peerId);
-    peer.close();
-
-    this.broadcast('peerClosed', {
-      peerId,
-      memberAgentMetaData: cloneMeta(peer.memberAgentMetaData)
-    });
-
-    if (!this.peers.size) {
-      this.router.close();
-      rooms.delete(this.id);
-    }
-  }
-
-  listProducers(exceptPeerId) {
-    const list = [];
-    for (const { peerId, producer } of this.producers.values()) {
-      if (peerId === exceptPeerId) {
-        continue;
-      }
-      const peer = this.peers.get(peerId);
-      list.push({
-        peerId,
-        producerId: producer.id,
-        memberAgentMetaData: cloneMeta(peer?.memberAgentMetaData)
-      });
-    }
-    return list;
-  }
-
-  listPeers(exceptPeerId) {
-    const peers = [];
-    for (const [peerId, peer] of this.peers) {
-      if (peerId === exceptPeerId) {
-        continue;
-      }
-      peers.push({
-        peerId,
-        memberAgentMetaData: cloneMeta(peer.memberAgentMetaData)
-      });
-    }
-    return peers;
-  }
-
-  broadcast(event, payload, { exceptPeerId } = {}) {
-    for (const [peerId, peer] of this.peers) {
-      if (peerId === exceptPeerId) {
-        continue;
-      }
-
-      if (peer.socket && !peer.socket.disconnected) {
-        peer.socket.emit(event, payload);
-      }
-    }
-  }
-
-  async createTransport({ peer, direction }) {
-    const {
-      listenIps,
-      enableUdp,
-      enableTcp,
-      preferUdp,
-      initialAvailableOutgoingBitrate,
-      minimumAvailableOutgoingBitrate,
-      appData: transportAppData = {}
-    } = mediasoupConfig.webRtcTransport;
-
-    const transport = await this.router.createWebRtcTransport({
-      listenIps,
-      enableUdp,
-      enableTcp,
-      preferUdp,
-      initialAvailableOutgoingBitrate,
-      minimumAvailableOutgoingBitrate,
-      appData: {
-        ...transportAppData,
-        peerId: peer.id,
-        direction
-      }
-    });
-
-    if (mediasoupConfig.webRtcTransport.maxIncomingBitrate) {
-      try {
-        await transport.setMaxIncomingBitrate(mediasoupConfig.webRtcTransport.maxIncomingBitrate);
-      } catch (error) {
-        console.warn('setMaxIncomingBitrate failed:', error.message);
-      }
-    }
-
-    transport.on('dtlsstatechange', (state) => {
-      if (state === 'closed') {
-        transport.close();
-      }
-    });
-
-    transport.on('close', () => {
-      peer.transports.delete(transport.id);
-    });
-
-    peer.transports.set(transport.id, transport);
-
-    return transport;
-  }
-
-  trackProducer({ peer, producer }) {
-  this.producers.set(producer.id, { peerId: peer.id, producer });
-
-    let closed = false;
-    const onClose = () => {
-      if (closed) {
-        return;
-      }
-      closed = true;
-      this.producers.delete(producer.id);
-      this.broadcast(
-        'producerClosed',
-        { producerId: producer.id, peerId: peer.id },
-        { exceptPeerId: peer.id }
-      );
-    };
-
-    producer.on('transportclose', onClose);
-    producer.on('close', onClose);
-
-    this.broadcast(
-      'newProducer',
-      {
-        producerId: producer.id,
-        peerId: peer.id,
-        memberAgentMetaData: cloneMeta(peer.memberAgentMetaData)
-      },
-      { exceptPeerId: peer.id }
-    );
-  }
-
-  getProducer(producerId) {
-    return this.producers.get(producerId);
-  }
+  });
 }
 
-class Peer {
-  constructor({ id, socket, memberAgentMetaData }) {
-    this.id = id;
-    this.socket = socket;
-    this.transports = new Map();
-    this.producers = new Map();
-    this.consumers = new Map();
-    this.memberAgentMetaData = cloneMeta(memberAgentMetaData);
-  }
-
-  getTransport(transportId) {
-    const transport = this.transports.get(transportId);
-    if (!transport) {
-      throw new Error(`Transport "${transportId}" not found`);
-    }
-    return transport;
-  }
-
-  addProducer(producer) {
-    this.producers.set(producer.id, producer);
-    producer.on('close', () => {
-      this.producers.delete(producer.id);
-    });
-    producer.on('transportclose', () => {
-      this.producers.delete(producer.id);
-    });
-  }
-
-  addConsumer(consumer) {
-    this.consumers.set(consumer.id, consumer);
-    consumer.on('close', () => {
-      this.consumers.delete(consumer.id);
-    });
-    consumer.on('transportclose', () => {
-      this.consumers.delete(consumer.id);
-    });
-  }
-
-  getConsumer(consumerId) {
-    const consumer = this.consumers.get(consumerId);
-    if (!consumer) {
-      throw new Error(`Consumer "${consumerId}" not found`);
-    }
-    return consumer;
-  }
-
-  close() {
-    for (const consumer of this.consumers.values()) {
-      consumer.close();
-    }
-    for (const producer of this.producers.values()) {
-      producer.close();
-    }
-    for (const transport of this.transports.values()) {
-      transport.close();
-    }
-
-    this.consumers.clear();
-    this.producers.clear();
-    this.transports.clear();
-  }
-}
 
 function ackSuccess(callback, payload = {}) {
   if (typeof callback === 'function') {
@@ -408,6 +166,7 @@ io.on('connection', (socket) => {
 
       const meta = cloneMeta(memberAgentMetaData);
       const room = await getOrCreateRoom(roomId);
+      await room.ensureDataBus();
       const peer = room.addPeer({ peerId, socket, memberAgentMetaData: meta });
       socket.data = { roomId, peerId, memberAgentMetaData: meta };
 
@@ -418,7 +177,8 @@ io.on('connection', (socket) => {
       ackSuccess(callback, {
         routerRtpCapabilities: room.router.rtpCapabilities,
         existingProducers: room.listProducers(peer.id),
-        existingPeers: room.listPeers(peer.id)
+        existingPeers: room.listPeers(peer.id),
+        roomDataBus: room.getDataBusInfo(peer.id)
       });
     } catch (error) {
       console.error('join error', error);
@@ -487,6 +247,41 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('produceData', async ({ transportId, sctpStreamParameters, label, protocol, appData }, callback) => {
+    try {
+      if (!transportId || !sctpStreamParameters) {
+        throw new Error('transportId and sctpStreamParameters are required');
+      }
+
+      const { room, peer } = resolvePeerFromSocket(socket);
+      const transport = peer.getTransport(transportId);
+      const dataProducer = await transport.produceData({
+        sctpStreamParameters,
+        label,
+        protocol,
+        appData: {
+          ...appData,
+          peerId: peer.id
+        }
+      });
+
+      peer.addDataProducer(dataProducer);
+
+      const detach = () => {
+        room.detachDataProducer(dataProducer.id);
+      };
+      dataProducer.on('close', detach);
+      dataProducer.on('transportclose', detach);
+
+      await room.attachDataProducer({ peer, dataProducer });
+
+      ackSuccess(callback, { id: dataProducer.id });
+    } catch (error) {
+      console.error('produceData error', error);
+      ackError(callback, error);
+    }
+  });
+
   socket.on('closeProducer', ({ producerId }, callback) => {
     try {
       // Check if peer has joined a room before attempting to close producer
@@ -518,6 +313,38 @@ io.on('connection', (socket) => {
       ackSuccess(callback);
     } catch (error) {
       console.error('closeProducer error', error);
+      ackError(callback, error);
+    }
+  });
+
+  socket.on('closeDataProducer', ({ dataProducerId }, callback) => {
+    try {
+      const { roomId, peerId } = socket.data || {};
+      if (!roomId || !peerId) {
+        ackSuccess(callback);
+        return;
+      }
+
+      const room = rooms.get(roomId);
+      if (!room) {
+        ackSuccess(callback);
+        return;
+      }
+
+      const peer = room.getPeer(peerId);
+      if (!peer) {
+        ackSuccess(callback);
+        return;
+      }
+
+      const dataProducer = peer.getDataProducer(dataProducerId);
+      if (dataProducer) {
+        dataProducer.close();
+        room.detachDataProducer(dataProducer.id);
+      }
+      ackSuccess(callback);
+    } catch (error) {
+      console.error('closeDataProducer error', error);
       ackError(callback, error);
     }
   });
@@ -561,6 +388,34 @@ io.on('connection', (socket) => {
       });
     } catch (error) {
       console.error('consume error', error);
+      ackError(callback, error);
+    }
+  });
+
+  socket.on('joinDataBus', async ({ transportId }, callback) => {
+    try {
+      if (!transportId) {
+        throw new Error('transportId is required');
+      }
+
+      const { room, peer } = resolvePeerFromSocket(socket);
+      const transport = peer.getTransport(transportId);
+      const consumer = await room.createDataBusConsumer({ peer, transport });
+      peer.addDataConsumer(consumer);
+      consumer.on('dataproducerclose', () => {
+        consumer.close();
+      });
+
+      ackSuccess(callback, {
+        id: consumer.id,
+        dataProducerId: consumer.dataProducerId,
+        sctpStreamParameters: consumer.sctpStreamParameters,
+        label: consumer.label,
+        protocol: consumer.protocol,
+        appData: consumer.appData
+      });
+    } catch (error) {
+      console.error('joinDataBus error', error);
       ackError(callback, error);
     }
   });

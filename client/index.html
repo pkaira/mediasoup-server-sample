@@ -85,6 +85,16 @@
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     }
 
+    .data-controls {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .data-controls input {
+      flex: 1;
+    }
+
     video {
       width: 100%;
       background: #000;
@@ -100,6 +110,18 @@
       border-radius: 0.5rem;
       padding: 0.75rem;
       white-space: pre-wrap;
+    }
+
+    #dataFeed {
+      margin-top: 0.75rem;
+      max-height: 200px;
+      overflow-y: auto;
+      background: #0f0f0f;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      font-family: "Fira Code", monospace;
+      font-size: 0.8rem;
+      min-height: 90px;
     }
   </style>
 </head>
@@ -142,6 +164,18 @@
           <div id="remoteVideos"></div>
         </div>
       </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Data Bus</legend>
+      <div class="data-controls">
+        <input id="dataMessage" type="text" placeholder="Broadcast message" disabled />
+        <select id="dataTarget" disabled>
+          <option value="broadcast">Broadcast</option>
+        </select>
+        <button id="sendDataBtn" disabled>Send message</button>
+      </div>
+      <div id="dataFeed"></div>
     </fieldset>
 
     <fieldset>

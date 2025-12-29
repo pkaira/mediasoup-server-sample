@@ -80,7 +80,8 @@ pids_for_server() {
     [[ -z "$pid" ]] && continue
     [[ -n "${seen[$pid]:-}" ]] && continue
     seen[$pid]=1
-    cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)
+    cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || \
+          sudo readlink -f "/proc/$pid/cwd" 2>/dev/null || true)
     if [[ "$cwd" == "$SCRIPT_DIR" ]]; then
       unique+=("$pid")
     fi
