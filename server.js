@@ -358,10 +358,29 @@ io.on('connection', (socket) => {
         throw new Error('Producer not found');
       }
 
+      const capabilitySummary = Array.isArray(rtpCapabilities?.codecs)
+        ? rtpCapabilities.codecs.map((codec) => {
+            const name = codec?.mimeType || 'unknown';
+            const payload = codec?.preferredPayloadType;
+            const clock = codec?.clockRate;
+            return `${name}:${payload ?? '?'}@${clock ?? '?'}hz`;
+          })
+        : [];
+      const debugContext = {
+        consumerPeerId: peer.id,
+        targetProducerId: producerId,
+        producerPeerId: producerInfo.peerId,
+        transportId,
+        codecCount: rtpCapabilities?.codecs?.length || 0,
+        codecSummary: capabilitySummary
+      };
+
       if (!room.router.canConsume({ producerId, rtpCapabilities })) {
+        console.warn('router.canConsume returned false', debugContext);
         throw new Error('Cannot consume this producer');
       }
 
+      console.debug('Consuming producer', debugContext);
       const transport = peer.getTransport(transportId);
       const consumer = await transport.consume({
         producerId,
