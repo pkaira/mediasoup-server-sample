@@ -55,6 +55,32 @@ const dataChannelAllocation = {
   broadcastSubchannel: BROADCAST_SUBCHANNEL_ID,
   assignedSubchannels: []
 };
+const PREFERRED_VIDEO_CODECS = ['video/VP8'];
+
+function selectPreferredCodec(kind, preferredMimeTypes = []) {
+  if (!device?.rtpCapabilities?.codecs) {
+    return null;
+  }
+
+  const normalizedKind = typeof kind === 'string' ? kind.toLowerCase() : undefined;
+  const codecs = device.rtpCapabilities.codecs.filter((codec) => codec.kind === normalizedKind);
+  if (!codecs.length) {
+    return null;
+  }
+
+  const normalizedPreferences = preferredMimeTypes
+    .map((mime) => (typeof mime === 'string' ? mime.toLowerCase() : null))
+    .filter(Boolean);
+
+  for (const preference of normalizedPreferences) {
+    const match = codecs.find((codec) => codec.mimeType?.toLowerCase() === preference);
+    if (match) {
+      return match;
+    }
+  }
+
+  return codecs[0];
+}
 
 function base64ToUint8Array(base64) {
   if (typeof window !== 'undefined' && typeof window.atob === 'function') {
@@ -1249,7 +1275,15 @@ async function startMedia() {
         continue;
       }
 
-      const producer = await transport.produce({ track, appData: { kind: track.kind } });
+      const options = { track, appData: { kind: track.kind } };
+      if (track.kind === 'video') {
+        const preferredCodec = selectPreferredCodec('video', PREFERRED_VIDEO_CODECS);
+        if (preferredCodec) {
+          options.codec = preferredCodec;
+        }
+      }
+
+      const producer = await transport.produce(options);
       producers.set(track.kind, producer);
 
       producer.on('trackended', () => {

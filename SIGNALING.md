@@ -112,6 +112,46 @@ flowchart LR
 - Normalized envelopes add metadata (`from`, `target`, `channelIndex`) so clients can enforce UI or policy decisions without custom parsing per sender.
 - Automatic cleanup: when peers leave, the bus detaches their producers/consumers and frees subchannels, preventing leaks.
 
+### Data Channel Signaling Flow
+
+| Step | Socket.IO event(s) | Purpose | Key code |
+| --- | --- | --- | --- |
+| 1 | `join` | Peer enters the room; server ensures `RoomDataBus` exists and returns `roomDataBus` metadata. | `server.js` (`socket.on('join')`), `room.js#ensureDataBus` |
+| 2 | `createWebRtcTransport` + `connectWebRtcTransport` (send) | Client obtains a send transport capable of SCTP so it can publish data channels. | `server.js#createWebRtcTransport`, `client/main.js#ensureSendTransport` |
+| 3 | `produceData` | Client advertises each SCTP stream (ordered/unordered variants). Server registers every data producer and attaches it to the bus. | `server.js#socket.on('produceData')`, `room.js#attachDataProducer`, `roomDataBus.js#attachPeerProducer` |
+| 4 | `createWebRtcTransport` + `connectWebRtcTransport` (recv) | Client provisions a receiving transport dedicated to media + data bus consumption. | Same handlers as Step 2 but with `direction: 'recv'`. |
+| 5 | `joinDataBus` | Server creates a single `consumeData` tied to the super producer and returns its parameters so the client can subscribe. | `server.js#socket.on('joinDataBus')`, `room.js#createDataBusConsumer` |
+| 6 | (Mediasoup data flow) | Client sends envelopes via `transport.produceData`; bus forwards them to every subscriber, honoring subchannel hints. | `roomDataBus.js#forwardMessage`, `client/main.js#handleIncomingData` |
+
+```mermaid
+sequenceDiagram
+   participant Client
+   participant Server as Socket.IO Server
+   participant Room as Room + DataBus
+   participant Peers as Other Peers
+
+   Client->>Server: join(roomId, peerId, meta)
+   Server->>Room: getOrCreateRoom + ensureDataBus
+   Server-->>Client: ack { routerRtpCapabilities, roomDataBus }
+
+   Client->>Server: createWebRtcTransport { direction: "send" }
+   Server-->>Client: send transport params
+   Client->>Server: connectWebRtcTransport (send)
+   Client->>Server: produceData (ordered / partial reliability)
+   Server->>Room: attachDataProducer(peer, dataProducer)
+
+   Client->>Server: createWebRtcTransport { direction: "recv" }
+   Server-->>Client: recv transport params
+   Client->>Server: connectWebRtcTransport (recv)
+   Client->>Server: joinDataBus { transportId }
+   Server->>Room: createDataBusConsumer(peer)
+   Room-->>Server: consumer params
+   Server-->>Client: ack { id, dataProducerId, sctpStreamParameters }
+
+   Client->>Room: send envelopes via dataProducer
+   Room->>Peers: forward envelopes over shared consumer
+```
+
 ## 5. Client Integration (`client/main.js`)
 
 1. **Join flow:**

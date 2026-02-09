@@ -136,23 +136,38 @@ function ackError(callback, error) {
   }
 }
 
-function resolvePeerFromSocket(socket) {
+function tryResolvePeerFromSocket(socket) {
   const { roomId, peerId } = socket.data || {};
   if (!roomId || !peerId) {
-    throw new Error('Peer has not joined a room yet');
+    return null;
   }
 
   const room = rooms.get(roomId);
   if (!room) {
-    throw new Error('Room is not available');
+    return null;
   }
 
   const peer = room.getPeer(peerId);
   if (!peer) {
-    throw new Error('Peer not found in room');
+    return null;
   }
 
   return { room, peer };
+}
+
+function resolvePeerFromSocket(socket) {
+  const resolved = tryResolvePeerFromSocket(socket);
+  if (!resolved) {
+    const { roomId, peerId } = socket.data || {};
+    if (!roomId || !peerId) {
+      throw new Error('Peer has not joined a room yet');
+    }
+    if (!rooms.get(roomId)) {
+      throw new Error('Room is not available');
+    }
+    throw new Error('Peer not found in room');
+  }
+  return resolved;
 }
 
 io.on('connection', (socket) => {
@@ -270,7 +285,7 @@ io.on('connection', (socket) => {
       const detach = () => {
         room.detachDataProducer(dataProducer.id);
       };
-      dataProducer.on('close', detach);
+      dataProducer.on('@close', detach);
       dataProducer.on('transportclose', detach);
 
       await room.attachDataProducer({ peer, dataProducer });
@@ -284,28 +299,14 @@ io.on('connection', (socket) => {
 
   socket.on('closeProducer', ({ producerId }, callback) => {
     try {
-      // Check if peer has joined a room before attempting to close producer
-      const { roomId, peerId } = socket.data || {};
-      if (!roomId || !peerId) {
-        // Peer hasn't joined a room yet, silently acknowledge
+      console.log(`Request to close producer [producerId:${producerId}] received`);
+      const resolved = tryResolvePeerFromSocket(socket);
+      if (!resolved) {
         ackSuccess(callback);
         return;
       }
 
-      const room = rooms.get(roomId);
-      if (!room) {
-        // Room doesn't exist anymore, silently acknowledge
-        ackSuccess(callback);
-        return;
-      }
-
-      const peer = room.getPeer(peerId);
-      if (!peer) {
-        // Peer not found in room, silently acknowledge
-        ackSuccess(callback);
-        return;
-      }
-
+      const { peer } = resolved;
       const producer = peer.producers.get(producerId);
       if (producer) {
         producer.close();
@@ -317,26 +318,65 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('pauseProducer', async ({ producerId }, callback) => {
+    try {
+      const resolved = tryResolvePeerFromSocket(socket);
+      if (!resolved) {
+        ackSuccess(callback);
+        return;
+      }
+
+      const { room, peer } = resolved;
+      const producer = peer.producers.get(producerId);
+      if (producer) {
+        await producer.pause();
+        room.broadcast(
+          'producerPaused',
+          { producerId: producer.id, peerId: peer.id },
+          { exceptPeerId: peer.id }
+        );
+      }
+      ackSuccess(callback);
+    } catch (error) {
+      console.error('pauseProducer error', error);
+      ackError(callback, error);
+    }
+  });
+
+  socket.on('resumeProducer', async ({ producerId }, callback) => {
+    try {
+      const resolved = tryResolvePeerFromSocket(socket);
+      if (!resolved) {
+        ackSuccess(callback);
+        return;
+      }
+
+      const { room, peer } = resolved;
+      const producer = peer.producers.get(producerId);
+      if (producer) {
+        await producer.resume();
+        room.broadcast(
+          'producerResumed',
+          { producerId: producer.id, peerId: peer.id },
+          { exceptPeerId: peer.id }
+        );
+      }
+      ackSuccess(callback);
+    } catch (error) {
+      console.error('resumeProducer error', error);
+      ackError(callback, error);
+    }
+  });
+
   socket.on('closeDataProducer', ({ dataProducerId }, callback) => {
     try {
-      const { roomId, peerId } = socket.data || {};
-      if (!roomId || !peerId) {
+      const resolved = tryResolvePeerFromSocket(socket);
+      if (!resolved) {
         ackSuccess(callback);
         return;
       }
 
-      const room = rooms.get(roomId);
-      if (!room) {
-        ackSuccess(callback);
-        return;
-      }
-
-      const peer = room.getPeer(peerId);
-      if (!peer) {
-        ackSuccess(callback);
-        return;
-      }
-
+      const { room, peer } = resolved;
       const dataProducer = peer.getDataProducer(dataProducerId);
       if (dataProducer) {
         dataProducer.close();
@@ -441,25 +481,7 @@ io.on('connection', (socket) => {
 
   socket.on('resumeConsumer', async ({ consumerId }, callback) => {
     try {
-      // Check if peer has joined a room before attempting to resume consumer
-      const { roomId, peerId } = socket.data || {};
-      if (!roomId || !peerId) {
-        ackError(callback, new Error('Peer has not joined a room yet'));
-        return;
-      }
-
-      const room = rooms.get(roomId);
-      if (!room) {
-        ackError(callback, new Error('Room is not available'));
-        return;
-      }
-
-      const peer = room.getPeer(peerId);
-      if (!peer) {
-        ackError(callback, new Error('Peer not found in room'));
-        return;
-      }
-
+      const { peer } = resolvePeerFromSocket(socket);
       const consumer = peer.getConsumer(consumerId);
       await consumer.resume();
       ackSuccess(callback);
@@ -471,25 +493,7 @@ io.on('connection', (socket) => {
 
   socket.on('pauseConsumer', async ({ consumerId }, callback) => {
     try {
-      // Check if peer has joined a room before attempting to pause consumer
-      const { roomId, peerId } = socket.data || {};
-      if (!roomId || !peerId) {
-        ackError(callback, new Error('Peer has not joined a room yet'));
-        return;
-      }
-
-      const room = rooms.get(roomId);
-      if (!room) {
-        ackError(callback, new Error('Room is not available'));
-        return;
-      }
-
-      const peer = room.getPeer(peerId);
-      if (!peer) {
-        ackError(callback, new Error('Peer not found in room'));
-        return;
-      }
-
+      const { peer } = resolvePeerFromSocket(socket);
       const consumer = peer.getConsumer(consumerId);
       await consumer.pause();
       ackSuccess(callback);

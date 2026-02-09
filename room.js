@@ -36,7 +36,7 @@ class Peer {
 
   addProducer(producer) {
     this.producers.set(producer.id, producer);
-    producer.on('close', () => {
+    producer.on('@close', () => {
       this.producers.delete(producer.id);
     });
     producer.on('transportclose', () => {
@@ -46,7 +46,7 @@ class Peer {
 
   addConsumer(consumer) {
     this.consumers.set(consumer.id, consumer);
-    consumer.on('close', () => {
+    consumer.on('@close', () => {
       this.consumers.delete(consumer.id);
     });
     consumer.on('transportclose', () => {
@@ -67,7 +67,7 @@ class Peer {
     const cleanup = () => {
       this.dataProducers.delete(dataProducer.id);
     };
-    dataProducer.on('close', cleanup);
+    dataProducer.on('@close', cleanup);
     dataProducer.on('transportclose', cleanup);
   }
 
@@ -80,7 +80,7 @@ class Peer {
     const cleanup = () => {
       this.dataConsumers.delete(dataConsumer.id);
     };
-    dataConsumer.on('close', cleanup);
+    dataConsumer.on('@close', cleanup);
     dataConsumer.on('transportclose', cleanup);
   }
 
@@ -306,10 +306,11 @@ class Room {
         { producerId: producer.id, peerId: peer.id },
         { exceptPeerId: peer.id }
       );
+      console.log(`Producer closed [producerId:${producer.id}, peerId:${peer.id}]`);
     };
 
     producer.on('transportclose', onClose);
-    producer.on('close', onClose);
+    producer.on('@close', onClose);
 
     this.broadcast(
       'newProducer',
