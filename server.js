@@ -389,6 +389,26 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('closeDataConsumer', ({ dataConsumerId }, callback) => {
+    try {
+      const resolved = tryResolvePeerFromSocket(socket);
+      if (!resolved) {
+        ackSuccess(callback);
+        return;
+      }
+
+      const { peer } = resolved;
+      const dataConsumer = peer.getDataConsumer(dataConsumerId);
+      if (dataConsumer) {
+        dataConsumer.close();
+      }
+      ackSuccess(callback);
+    } catch (error) {
+      console.error('closeDataConsumer error', error);
+      ackError(callback, error);
+    }
+  });
+  
   socket.on('consume', async ({ producerId, transportId, rtpCapabilities }, callback) => {
     try {
       const { room, peer } = resolvePeerFromSocket(socket);
