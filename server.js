@@ -463,7 +463,8 @@ io.on('connection', (socket) => {
         kind: consumer.kind,
         rtpParameters: consumer.rtpParameters,
         type: consumer.type,
-        producerPaused: consumer.producerPaused
+        producerPaused: consumer.producerPaused,
+        appData: cloneMeta(producerInfo.producer.appData)
       });
     } catch (error) {
       console.error('consume error', error);
