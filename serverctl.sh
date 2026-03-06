@@ -16,6 +16,37 @@ ENV_FILE="$SCRIPT_DIR/.env"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+find_node() {
+  local candidate_nvm_dirs=()
+  if [[ -n "${SUDO_USER:-}" ]]; then
+    local sudo_home
+    sudo_home=$(getent passwd "$SUDO_USER" | cut -d: -f6 2>/dev/null || true)
+    [[ -n "$sudo_home" ]] && candidate_nvm_dirs+=("$sudo_home/.nvm")
+  fi
+
+  candidate_nvm_dirs+=("${NVM_DIR:-$HOME/.nvm}")
+
+  local node_path
+  local nvm_dir
+  for nvm_dir in "${candidate_nvm_dirs[@]}"; do
+    if [[ -d "$nvm_dir/versions/node" ]]; then
+      node_path=$(find "$nvm_dir/versions/node" -type f -path '*/bin/node' 2>/dev/null | sort -V | tail -n1)
+      if [[ -n "$node_path" ]]; then
+        echo "$node_path"
+        return 0
+      fi
+    fi
+  done
+
+  node_path=$(command -v node 2>/dev/null || true)
+  if [[ -n "$node_path" ]]; then
+    echo "$node_path"
+    return 0
+  fi
+
+  return 1
+}
+
 load_env() {
   # Export variables from .env so we can decide whether sudo is needed
   if [[ -f "$ENV_FILE" ]]; then
@@ -158,11 +189,18 @@ start_server() {
   # Ensure log file exists and is writable for this user
   touch "$LOG_FILE" || true
 
+  local node_cmd
+  node_cmd=$(find_node || true)
+  if [[ -z "$node_cmd" ]]; then
+    log "Failed to locate node in PATH or NVM installation. Install Node.js and retry."
+    return 1
+  fi
+
   if needs_root; then
     # Preserve env and working dir; run as root to bind privileged ports
-    sudo -E nohup bash -lc "cd '$SCRIPT_DIR' && npm start" >>"$LOG_FILE" 2>&1 &
+    sudo -E nohup bash -lc "cd '$SCRIPT_DIR' && '$node_cmd' server.js" >>"$LOG_FILE" 2>&1 &
   else
-    nohup npm start >>"$LOG_FILE" 2>&1 &
+    nohup "$node_cmd" server.js >>"$LOG_FILE" 2>&1 &
   fi
   # Give it a moment to spawn
   sleep 2
@@ -179,6 +217,7 @@ start_server() {
 status_server() {
   local pids
   pids=$(pids_for_server)
+  pids=$(alive_pids $pids)
   if [[ -z "$pids" ]]; then
     echo "Server status: not running"
   else
